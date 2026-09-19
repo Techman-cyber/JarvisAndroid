@@ -7,6 +7,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 data class GeminiReply(val spoken: String, val detail: String?)
+data class Turn(val role: String, val text: String) // role: "user" or "model"
 
 /**
  * Minimal client for the Gemini generateContent REST API using only
@@ -15,21 +16,33 @@ data class GeminiReply(val spoken: String, val detail: String?)
  */
 object GeminiClient {
 
-    fun ask(apiKey: String, model: String, systemPrompt: String, userText: String): GeminiReply {
+    fun ask(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        priorTurns: List<Turn>,
+        userText: String
+    ): GeminiReply {
         return try {
             val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey")
+            val contents = JSONArray()
+            for (t in priorTurns) {
+                if (t.text.isBlank()) continue
+                contents.put(JSONObject().apply {
+                    put("role", t.role)
+                    put("parts", JSONArray().put(JSONObject().put("text", t.text)))
+                })
+            }
+            contents.put(JSONObject().apply {
+                put("role", "user")
+                put("parts", JSONArray().put(JSONObject().put("text", userText)))
+            })
             val body = JSONObject().apply {
                 put(
                     "system_instruction",
                     JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemPrompt)))
                 )
-                put(
-                    "contents",
-                    JSONArray().put(JSONObject().apply {
-                        put("role", "user")
-                        put("parts", JSONArray().put(JSONObject().put("text", userText)))
-                    })
-                )
+                put("contents", contents)
             }
             val raw = postJson(url, body) ?: return GeminiReply("I couldn't reach Gemini.", null)
             val json = JSONObject(raw)

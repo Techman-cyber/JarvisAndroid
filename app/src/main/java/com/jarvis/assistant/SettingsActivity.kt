@@ -26,5 +26,10 @@ class SettingsActivity : AppCompatActivity() {
             Prefs.setFemaleVoice(this, binding.femaleVoiceSwitch.isChecked)
             finish()
         }
+
+        binding.clearMemoryButton.setOnClickListener {
+            MemoryStore.clearEverything(this)
+            android.widget.Toast.makeText(this, "Memory cleared", android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
 }

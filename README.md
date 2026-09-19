@@ -85,8 +85,28 @@ listens in the background, not a bug in Jarvis.
 - "Hey Jarvis, generate an image of a cyberpunk city"
 - "Hey Jarvis, serious mode" / "normal mode" (or just tap the mode pill)
 - "Hey Jarvis, volume up" / "pause" / "next track"
+- "Hey Jarvis, remember that my wifi password is..." — Jarvis stores this
+  forever (until you tell it to forget) and will use it in future answers.
+- "Hey Jarvis, what do you remember?" — lists everything stored.
+- "Hey Jarvis, forget my wifi password" — removes anything matching.
+- "Hey Jarvis, clear your memory" — wipes both stored facts and the whole
+  conversation log (also available as a button in Settings).
 - Anything else falls back to Gemini — Jarvis speaks one short line, the
   full answer appears in the on-screen log.
+
+## How memory works
+- **Long-term facts**: only created when you explicitly say "remember...".
+  These persist forever on the device (SharedPreferences, not synced
+  anywhere) and are injected into every Gemini answer so it can actually
+  use them.
+- **Conversation history**: every exchange is saved automatically and
+  restored on screen the next time you open the app — closing the app no
+  longer wipes the log. The last several turns are also fed back to
+  Gemini so it stays coherent across a conversation instead of treating
+  every question in isolation.
+- Nothing is sent anywhere except to Gemini's API with your key, and only
+  when Jarvis actually needs to answer something — memory itself lives
+  only on your phone.
 
 ## If a build fails
 Open the failed Actions run and read the red step's log — it'll usually

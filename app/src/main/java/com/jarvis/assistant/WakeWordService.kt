@@ -44,9 +44,18 @@ class WakeWordService : Service() {
         tts.setFemale(Prefs.isFemaleVoice(this))
 
         processor = CommandProcessor(this, tts, object : JarvisCallback {
-            override fun onUserText(text: String) = broadcastLine("user", text)
-            override fun onJarvisSpoken(text: String) = broadcastLine("jarvis", text)
-            override fun onJarvisDetail(text: String) = broadcastLine("detail", text)
+            override fun onUserText(text: String) {
+                MemoryStore.appendTranscript(this@WakeWordService, "user", text)
+                broadcastLine("user", text)
+            }
+            override fun onJarvisSpoken(text: String) {
+                MemoryStore.appendTranscript(this@WakeWordService, "jarvis", text)
+                broadcastLine("jarvis", text)
+            }
+            override fun onJarvisDetail(text: String) {
+                MemoryStore.appendTranscript(this@WakeWordService, "detail", text)
+                broadcastLine("detail", text)
+            }
             override fun onImageReady(filePath: String) = broadcastImage(filePath)
             override fun onModeChanged(serious: Boolean) = broadcastMode(serious)
         })

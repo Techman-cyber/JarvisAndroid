@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         applyModeUi(Prefs.isSeriousMode(this))
+        restoreTranscript()
 
         binding.settingsButton.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -126,6 +127,11 @@ class MainActivity : AppCompatActivity() {
             binding.statusText.text = "Off"
             binding.sphereView.setEnergy(0.08f)
         }
+    }
+
+    private fun restoreTranscript() {
+        val lines = MemoryStore.getTranscript(this).takeLast(80)
+        for ((kind, text) in lines) appendLine(kind, text)
     }
 
     private fun appendLine(kind: String, text: String) {

@@ -44,6 +44,37 @@ class CommandProcessor(
             return
         }
 
+        // --- Memory commands ---
+        if (Regex("\\b(clear (your )?memory|forget everything|wipe your memory)\\b").containsMatchIn(low)) {
+            MemoryStore.clearEverything(ctx)
+            respond("Memory cleared, $honorific.")
+            return
+        }
+        Regex("^(?:remember that|please remember|remember)\\s+(.+)", RegexOption.IGNORE_CASE).find(text)?.let { m ->
+            val fact = m.groupValues[1].trim().trimEnd('.', '!')
+            if (fact.isNotBlank()) {
+                MemoryStore.addFact(ctx, fact)
+                respond("Got it, I'll remember that, $honorific.")
+            }
+            return
+        }
+        if (Regex("\\b(what do you remember|what have you remembered|list memory|show memory)\\b").containsMatchIn(low)) {
+            val facts = MemoryStore.getFacts(ctx)
+            if (facts.isEmpty()) {
+                respond("I don't have anything stored yet, $honorific.")
+            } else {
+                respond("I remember ${facts.size} thing${if (facts.size == 1) "" else "s"}, $honorific.")
+                callback.onJarvisDetail(facts.joinToString("\n") { "\u2022 $it" })
+            }
+            return
+        }
+        Regex("^forget (?:that |about )?(.+)", RegexOption.IGNORE_CASE).find(text)?.let { m ->
+            val keyword = m.groupValues[1].trim()
+            val removed = MemoryStore.removeFactContaining(ctx, keyword)
+            respond(if (removed) "Forgotten, $honorific." else "I didn't have anything matching that.")
+            return
+        }
+
         Regex("^call\\s+(.+)").find(low)?.let { m ->
             val name = m.groupValues[1].trim()
             if (ActivityCompat.checkSelfPermission(ctx, android.Manifest.permission.CALL_PHONE)
@@ -119,15 +150,28 @@ class CommandProcessor(
                 return@Thread
             }
             val serious = Prefs.isSeriousMode(ctx)
+            val facts = MemoryStore.getFacts(ctx)
+            val factsBlock = if (facts.isNotEmpty())
+                "\n\nThings the user has told you to remember, use them when relevant:\n" +
+                    facts.joinToString("\n") { "- $it" }
+            else ""
             val sys = (
                 if (serious)
                     "You are Jarvis, a no-nonsense assistant. Be direct and brief. No pleasantries, no hedging, no filler."
                 else
                     "You are Jarvis, a warm, capable voice assistant modeled on a classic AI butler. Occasionally address the user as \"$honorific\"."
-                ) + "\n\nAlways answer in exactly this format, nothing else:\n" +
+                ) + factsBlock + "\n\nAlways answer in exactly this format, nothing else:\n" +
                 "SPOKEN: <one short sentence, at most ~20 words, the single most important part, written to be read aloud>\n" +
                 "DETAIL: <the fuller answer, as long as needed; repeat SPOKEN here if nothing more to add>"
-            val reply = GeminiClient.ask(apiKey, Prefs.getTextModel(ctx), sys, text)
+            // Short-term memory: recent turns give Gemini conversational context.
+            // The current turn is already the last transcript entry (added by
+            // onUserText above), so drop it — it's passed separately as userText.
+            val priorTurns = MemoryStore.getTranscript(ctx)
+                .dropLast(1)
+                .filter { it.first == "user" || it.first == "jarvis" }
+                .takeLast(10)
+                .map { Turn(if (it.first == "user") "user" else "model", it.second) }
+            val reply = GeminiClient.ask(apiKey, Prefs.getTextModel(ctx), sys, priorTurns, text)
             callback.onJarvisSpoken(reply.spoken)
             tts.speak(reply.spoken)
             if (reply.detail != null && reply.detail != reply.spoken) callback.onJarvisDetail(reply.detail)
