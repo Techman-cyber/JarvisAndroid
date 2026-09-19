@@ -26,11 +26,14 @@ object Prefs {
     fun setSeriousMode(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean("serious_mode", v).apply()
 
     fun getTextModel(ctx: Context): String =
-        prefs(ctx).getString("text_model", "gemini-3.6-flash") ?: "gemini-3.6-flash"
+        prefs(ctx).getString("text_model", "gemini-3.8-flash") ?: "gemini-3.8-flash"
+    fun setTextModel(ctx: Context, v: String) =
+        prefs(ctx).edit().putString("text_model", v.trim().ifBlank { "gemini-3.8-flash" }).apply()
 
     fun getImageModel(ctx: Context): String =
-        prefs(ctx).getString("image_model", "gemini-2.5-flash-image")
-            ?: "gemini-2.5-flash-image"
+        prefs(ctx).getString("image_model", "gemini-3.1-flash-image") ?: "gemini-3.1-flash-image"
+    fun setImageModel(ctx: Context, v: String) =
+        prefs(ctx).edit().putString("image_model", v.trim().ifBlank { "gemini-3.1-flash-image" }).apply()
 
     fun getAliases(ctx: Context): Map<String, String> {
         val raw = getAliasesRaw(ctx)
