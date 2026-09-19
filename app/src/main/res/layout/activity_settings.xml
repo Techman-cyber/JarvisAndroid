@@ -57,6 +57,34 @@
             android:layout_height="wrap_content"
             android:textColor="@color/text"/>
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Text model"
+            android:textColor="@color/text_dim"
+            android:layout_marginTop="12dp"/>
+        <EditText
+            android:id="@+id/textModelInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="gemini-3.8-flash"
+            android:textColorHint="@color/text_dim"
+            android:textColor="@color/text"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Image model"
+            android:textColor="@color/text_dim"
+            android:layout_marginTop="12dp"/>
+        <EditText
+            android:id="@+id/imageModelInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="gemini-3.1-flash-image"
+            android:textColorHint="@color/text_dim"
+            android:textColor="@color/text"/>
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
