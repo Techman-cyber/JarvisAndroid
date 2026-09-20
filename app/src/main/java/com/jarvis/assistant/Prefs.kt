@@ -26,9 +26,9 @@ object Prefs {
     fun setSeriousMode(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean("serious_mode", v).apply()
 
     fun getTextModel(ctx: Context): String =
-        prefs(ctx).getString("text_model", "gemini-3.8-flash") ?: "gemini-3.8-flash"
+        prefs(ctx).getString("text_model", "gemini-2.5-flash-lite") ?: "gemini-2.5-flash-lite"
     fun setTextModel(ctx: Context, v: String) =
-        prefs(ctx).edit().putString("text_model", v.trim().ifBlank { "gemini-3.8-flash" }).apply()
+        prefs(ctx).edit().putString("text_model", v.trim().ifBlank { "gemini-2.5-flash-lite" }).apply()
 
     fun getImageModel(ctx: Context): String =
         prefs(ctx).getString("image_model", "gemini-3.1-flash-image") ?: "gemini-3.1-flash-image"

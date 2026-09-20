@@ -9,31 +9,40 @@ object AppLauncherActions {
 
     /** Returns the display label of the app it launched, or null if none matched. */
     fun launch(ctx: Context, spokenName: String): String? {
-        val pm = ctx.packageManager
-        val apps: List<ApplicationInfo> = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-        val target = spokenName.lowercase().replace(" ", "")
+        return try {
+            val pm = ctx.packageManager
+            val apps: List<ApplicationInfo> = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            val target = normalize(spokenName)
+            if (target.isBlank()) return null
 
-        var exact: ApplicationInfo? = null
-        var exactLabel = ""
-        var partial: ApplicationInfo? = null
-        var partialLabel = ""
+            // Only consider apps that can actually be launched — many entries
+            // returned here are background components or services with no
+            // launcher activity at all. Matching against those first and then
+            // discovering they can't be opened was the bug: it gave up
+            // entirely instead of trying the next candidate.
+            data class Candidate(val info: ApplicationInfo, val label: String, val normalized: String, val intent: Intent)
+            val launchable = apps.mapNotNull { app ->
+                if (app.packageName == ctx.packageName) return@mapNotNull null
+                val intent = pm.getLaunchIntentForPackage(app.packageName) ?: return@mapNotNull null
+                val label = pm.getApplicationLabel(app).toString()
+                Candidate(app, label, normalize(label), intent)
+            }
 
-        for (app in apps) {
-            val label = pm.getApplicationLabel(app).toString()
-            val normalized = label.lowercase().replace(" ", "")
-            if (normalized == target) {
-                exact = app; exactLabel = label; break
-            }
-            if (partial == null && (normalized.contains(target) || target.contains(normalized))) {
-                partial = app; partialLabel = label
-            }
+            val exact = launchable.firstOrNull { it.normalized == target }
+            val startsWith = launchable.firstOrNull { it.normalized.startsWith(target) || target.startsWith(it.normalized) }
+            val contains = launchable.firstOrNull { it.normalized.contains(target) || target.contains(it.normalized) }
+            val chosen = exact ?: startsWith ?: contains ?: return null
+
+            chosen.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(chosen.intent)
+            chosen.label
+        } catch (e: Exception) {
+            // Some OEM builds restrict getInstalledApplications even with the
+            // QUERY_ALL_PACKAGES permission declared; fail quietly rather than
+            // crashing the whole background service.
+            null
         }
-
-        val chosen = exact ?: partial ?: return null
-        val chosenLabel = if (exact != null) exactLabel else partialLabel
-        val launchIntent = pm.getLaunchIntentForPackage(chosen.packageName) ?: return null
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        ctx.startActivity(launchIntent)
-        return chosenLabel
     }
+
+    private fun normalize(s: String) = s.lowercase().replace(Regex("[^a-z0-9]"), "")
 }

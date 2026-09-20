@@ -67,7 +67,7 @@
             android:id="@+id/textModelInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="gemini-3.8-flash"
+            android:hint="gemini-2.5-flash-lite"
             android:textColorHint="@color/text_dim"
             android:textColor="@color/text"/>
 
