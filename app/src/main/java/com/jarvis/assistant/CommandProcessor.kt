@@ -1,7 +1,9 @@
 package com.jarvis.assistant
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.view.KeyEvent
 import androidx.core.app.ActivityCompat
 
@@ -23,11 +25,35 @@ class CommandProcessor(
     private val tts: TtsManager,
     private val callback: JarvisCallback
 ) {
+    // Known sites with a direct search URL. Opening these via ACTION_VIEW lets
+    // Android itself decide whether to hand it to an installed app (YouTube,
+    // Amazon, etc.) or fall back to the browser — we don't need to care which.
+    private val siteSearchUrls: Map<String, (String) -> String> = mapOf(
+        "youtube" to { q: String -> "https://www.youtube.com/results?search_query=${Uri.encode(q)}" },
+        "google" to { q: String -> "https://www.google.com/search?q=${Uri.encode(q)}" },
+        "amazon" to { q: String -> "https://www.amazon.com/s?k=${Uri.encode(q)}" },
+        "spotify" to { q: String -> "https://open.spotify.com/search/${Uri.encode(q)}" },
+        "github" to { q: String -> "https://github.com/search?q=${Uri.encode(q)}" },
+        "wikipedia" to { q: String -> "https://en.wikipedia.org/wiki/Special:Search?search=${Uri.encode(q)}" },
+        "reddit" to { q: String -> "https://www.reddit.com/search/?q=${Uri.encode(q)}" },
+        "maps" to { q: String -> "https://www.google.com/maps/search/${Uri.encode(q)}" }
+    )
+
+    private fun openSiteSearch(site: String, query: String, honorific: String) {
+        val builder = siteSearchUrls[site] ?: siteSearchUrls["google"]!!
+        val label = site.replaceFirstChar { it.uppercase() }
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(builder(query)))
+        SystemLauncher.launch(ctx, intent, label)
+        respond("Searching $label for $query.")
+    }
 
     fun handle(rawText: String) {
-        val text = rawText.trim()
-        if (text.isEmpty()) return
-        callback.onUserText(text)
+        val rawTrimmed = rawText.trim()
+        if (rawTrimmed.isEmpty()) return
+        callback.onUserText(rawTrimmed)
+        // "yt" is an extremely common shorthand that speech recognition also
+        // often produces literally, so normalize it before any matching.
+        val text = Regex("\\byt\\b", RegexOption.IGNORE_CASE).replace(rawTrimmed, "youtube")
         val low = text.lowercase()
         val honorific = Prefs.getHonorific(ctx)
 
@@ -93,20 +119,65 @@ class CommandProcessor(
             return
         }
 
-        Regex("^(?:open|launch|start)\\s+(.+)").find(low)?.let { m ->
-            val appName = m.groupValues[1].trim()
-            val launched = AppLauncherActions.launch(ctx, appName)
-            if (launched != null) respond("Opening $launched.")
-            else respond("I couldn't find an app called $appName.")
+        // --- Flexible "open/go on/go to SITE (and) search for QUERY" phrasing ---
+        // Handles: "open youtube and search for X", "go on youtube search for X",
+        // "go to youtube and search X", etc. — any of open/go on/go to, any of
+        // search/search for, with or without "and" in between.
+        Regex("^(?:open|go (?:on|to)|launch|start)\\s+(\\w+)\\s+(?:and\\s+)?search(?:\\s+for)?\\s+(.+)")
+            .find(low)?.let { m ->
+                val site = m.groupValues[1].trim()
+                val query = m.groupValues[2].trim()
+                openSiteSearch(site, query, honorific)
+                return
+            }
+        // Reversed phrasing: "search for X on youtube" / "search X in google"
+        Regex("^search(?:\\s+for)?\\s+(.+?)\\s+(?:on|in)\\s+(\\w+)$")
+            .find(low)?.let { m ->
+                val query = m.groupValues[1].trim()
+                val site = m.groupValues[2].trim()
+                openSiteSearch(site, query, honorific)
+                return
+            }
+        // "youtube search X" / "google search X"
+        Regex("^(${siteSearchUrls.keys.joinToString("|")})\\s+search(?:\\s+for)?\\s+(.+)")
+            .find(low)?.let { m ->
+                openSiteSearch(m.groupValues[1].trim(), m.groupValues[2].trim(), honorific)
+                return
+            }
+        // "search google for X" / "search youtube for X" — site named right
+        // after "search", before "for". Must come before the bare "search for
+        // X" fallback below, or "google"/"youtube" would end up inside the
+        // query text instead of being read as the destination site.
+        Regex("^search\\s+(${siteSearchUrls.keys.joinToString("|")})\\s+for\\s+(.+)")
+            .find(low)?.let { m ->
+                openSiteSearch(m.groupValues[1].trim(), m.groupValues[2].trim(), honorific)
+                return
+            }
+        // Bare "search for X" or "google X" — no app/browser required either
+        // way, this always has somewhere to go: Google.
+        Regex("^google\\s+(.+)").find(low)?.let { m ->
+            openSiteSearch("google", m.groupValues[1].trim(), honorific)
+            return
+        }
+        Regex("^search(?:\\s+for)?\\s+(.+)").find(low)?.let { m ->
+            openSiteSearch("google", m.groupValues[1].trim(), honorific)
             return
         }
 
-        Regex("^(?:play|search youtube for|youtube)\\s+(.+)").find(low)?.let { m ->
-            val q = m.groupValues[1].trim()
-            MediaActions.searchYoutube(ctx, q)
-            respond("Searching YouTube for $q.")
+        Regex("^(?:open|launch|start)\\s+(.+)").find(low)?.let { m ->
+            val appName = m.groupValues[1].trim()
+            val launched = AppLauncherActions.launch(ctx, appName)
+            if (launched != null) {
+                respond("Opening $launched.")
+            } else {
+                // No matching app installed — go to the web instead of just
+                // giving up, exactly like a real assistant would.
+                MediaActions.searchGoogle(ctx, appName)
+                respond("I don't have $appName installed, so I searched the web for it instead.")
+            }
             return
         }
+
         if (Regex("\\b(pause|stop music)\\b").containsMatchIn(low)) {
             MediaActions.mediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PAUSE); respond("Paused."); return
         }
@@ -121,6 +192,13 @@ class CommandProcessor(
         }
         if (Regex("\\bvolume up\\b").containsMatchIn(low)) { MediaActions.volumeUp(ctx); respond("Volume up."); return }
         if (Regex("\\bvolume down\\b").containsMatchIn(low)) { MediaActions.volumeDown(ctx); respond("Volume down."); return }
+        // Bare "play X" (a song/video name) — falls through to here only once
+        // "play music"/"resume" above didn't match, so this is safe as a
+        // catch-all for "play believer by imagine dragons" style requests.
+        Regex("^play\\s+(.+)").find(low)?.let { m ->
+            openSiteSearch("youtube", m.groupValues[1].trim(), honorific)
+            return
+        }
 
         Regex("^(?:generate|create|make|draw)\\s+(?:an?\\s+)?image\\s*(?:of|for|showing)?\\s*(.+)")
             .find(low)?.let { m ->
@@ -128,14 +206,18 @@ class CommandProcessor(
                 respond("Generating that image, $honorific.")
                 Thread {
                     val apiKey = Prefs.getApiKey(ctx)
-                    val bytes = GeminiClient.generateImage(apiKey, Prefs.getImageModel(ctx), prompt)
-                    if (bytes != null) {
+                    val result = GeminiClient.generateImage(apiKey, Prefs.getImageModel(ctx), prompt)
+                    if (result.bytes != null) {
                         val file = java.io.File(ctx.cacheDir, "jarvis_image_${System.currentTimeMillis()}.png")
-                        file.writeBytes(bytes)
+                        file.writeBytes(result.bytes)
                         callback.onImageReady(file.absolutePath)
                         tts.speak("Here's your image, $honorific.")
                     } else {
-                        tts.speak("The image didn't come through that time.")
+                        // Speak the real reason instead of a generic failure —
+                        // this is almost always a billing/quota/model-access
+                        // issue on the API key, not a bug, so it's worth seeing.
+                        callback.onJarvisDetail("Image generation failed: ${result.error}")
+                        tts.speak("That image didn't work. I've put the exact error on screen.")
                     }
                 }.start()
                 return

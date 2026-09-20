@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:layout_marginBottom="8dp"
+    android:gravity="center_vertical">
+
+    <EditText
+        android:id="@+id/aliasKeyInput"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:background="@drawable/bg_rounded_input"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:hint="mummy"
+        android:textColorHint="@color/text_dim"
+        android:textColor="@color/text"
+        android:textSize="13sp"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="\u2192"
+        android:textColor="@color/text_dim"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"/>
+
+    <EditText
+        android:id="@+id/aliasValueInput"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:background="@drawable/bg_rounded_input"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:hint="Mumma"
+        android:textColorHint="@color/text_dim"
+        android:textColor="@color/text"
+        android:textSize="13sp"/>
+
+    <TextView
+        android:id="@+id/removeAliasButton"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/bg_gear"
+        android:gravity="center"
+        android:text="\u00d7"
+        android:textColor="@color/danger"
+        android:textSize="16sp"
+        android:clickable="true"
+        android:focusable="true"/>
+
+</LinearLayout>

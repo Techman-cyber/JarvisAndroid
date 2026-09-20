@@ -33,8 +33,7 @@ object AppLauncherActions {
             val contains = launchable.firstOrNull { it.normalized.contains(target) || target.contains(it.normalized) }
             val chosen = exact ?: startsWith ?: contains ?: return null
 
-            chosen.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            ctx.startActivity(chosen.intent)
+            SystemLauncher.launch(ctx, chosen.intent, chosen.label)
             chosen.label
         } catch (e: Exception) {
             // Some OEM builds restrict getInstalledApplications even with the

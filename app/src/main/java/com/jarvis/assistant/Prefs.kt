@@ -19,16 +19,16 @@ object Prefs {
     fun getHonorific(ctx: Context): String = prefs(ctx).getString("honorific", "sir") ?: "sir"
     fun setHonorific(ctx: Context, v: String) = prefs(ctx).edit().putString("honorific", v).apply()
 
-    fun isFemaleVoice(ctx: Context): Boolean = prefs(ctx).getBoolean("female_voice", false)
-    fun setFemaleVoice(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean("female_voice", v).apply()
+    fun getVoiceName(ctx: Context): String? = prefs(ctx).getString("voice_name", null)
+    fun setVoiceName(ctx: Context, name: String?) = prefs(ctx).edit().putString("voice_name", name).apply()
 
     fun isSeriousMode(ctx: Context): Boolean = prefs(ctx).getBoolean("serious_mode", false)
     fun setSeriousMode(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean("serious_mode", v).apply()
 
     fun getTextModel(ctx: Context): String =
-        prefs(ctx).getString("text_model", "gemini-2.5-flash-lite") ?: "gemini-2.5-flash-lite"
+        prefs(ctx).getString("text_model", "gemini-3.6-flash") ?: "gemini-3.6-flash"
     fun setTextModel(ctx: Context, v: String) =
-        prefs(ctx).edit().putString("text_model", v.trim().ifBlank { "gemini-2.5-flash-lite" }).apply()
+        prefs(ctx).edit().putString("text_model", v.trim().ifBlank { "gemini-3.6-flash" }).apply()
 
     fun getImageModel(ctx: Context): String =
         prefs(ctx).getString("image_model", "gemini-3.1-flash-image") ?: "gemini-3.1-flash-image"

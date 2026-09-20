@@ -48,26 +48,50 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Contact aliases, e.g. boss=John Smith; mom=Jane Doe"
+            android:text="Contact aliases"
             android:textColor="@color/text_dim"
             android:layout_marginTop="12dp"/>
-        <EditText
-            android:id="@+id/aliasesInput"
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Say the left word instead of the real contact name, e.g. mummy \u2192 the name saved in your phone."
+            android:textColor="@color/text_dim"
+            android:textSize="11sp"
+            android:layout_marginBottom="6dp"/>
+
+        <LinearLayout
+            android:id="@+id/aliasRowsContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/text"/>
+            android:orientation="vertical"/>
+
+        <TextView
+            android:id="@+id/addAliasButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_rounded_button"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:layout_marginTop="6dp"
+            android:text="+ Add alias"
+            android:textColor="@color/accent"
+            android:textSize="12sp"
+            android:clickable="true"
+            android:focusable="true"/>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Text model"
             android:textColor="@color/text_dim"
-            android:layout_marginTop="12dp"/>
+            android:layout_marginTop="16dp"/>
         <EditText
             android:id="@+id/textModelInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="gemini-2.5-flash-lite"
+            android:hint="gemini-3.6-flash"
             android:textColorHint="@color/text_dim"
             android:textColor="@color/text"/>
 
@@ -103,23 +127,25 @@
                 android:layout_height="wrap_content"/>
         </LinearLayout>
 
-        <LinearLayout
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Voice"
+            android:textColor="@color/text_dim"
+            android:layout_marginTop="16dp"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Shows every voice actually installed on this phone \u2014 locale codes indicate accent (en-IN, en-US, en-GB, en-AU, etc.) where your device provides them."
+            android:textColor="@color/text_dim"
+            android:textSize="11sp"
+            android:layout_marginBottom="6dp"/>
+        <Spinner
+            android:id="@+id/voiceSpinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="8dp"
-            android:gravity="center_vertical">
-            <TextView
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:text="Female voice"
-                android:textColor="@color/text"/>
-            <Switch
-                android:id="@+id/femaleVoiceSwitch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"/>
-        </LinearLayout>
+            android:background="@drawable/bg_rounded_input"
+            android:padding="8dp"/>
 
         <Button
             android:id="@+id/saveButton"

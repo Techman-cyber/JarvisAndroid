@@ -49,7 +49,7 @@ class WakeWordService : Service() {
         }
 
         tts = TtsManager(this) { restartListening() }
-        tts.setFemale(Prefs.isFemaleVoice(this))
+        tts.setPreferredVoiceName(Prefs.getVoiceName(this))
 
         processor = CommandProcessor(this, tts, object : JarvisCallback {
             override fun onUserText(text: String) {

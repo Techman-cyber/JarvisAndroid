@@ -13,8 +13,15 @@ object MediaActions {
             Intent.ACTION_VIEW,
             Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(query)}")
         )
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        ctx.startActivity(intent)
+        SystemLauncher.launch(ctx, intent, "YouTube")
+    }
+
+    fun searchGoogle(ctx: Context, query: String) {
+        val intent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://www.google.com/search?q=${Uri.encode(query)}")
+        )
+        SystemLauncher.launch(ctx, intent, "Google search")
     }
 
     fun mediaKey(ctx: Context, keyCode: Int) {

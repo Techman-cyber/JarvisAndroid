@@ -71,7 +71,9 @@ object GeminiClient {
         }
     }
 
-    fun generateImage(apiKey: String, model: String, prompt: String): ByteArray? {
+    data class ImageResult(val bytes: ByteArray?, val error: String?)
+
+    fun generateImage(apiKey: String, model: String, prompt: String): ImageResult {
         return try {
             val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey")
             val body = JSONObject().apply {
@@ -87,22 +89,31 @@ object GeminiClient {
                     JSONObject().put("responseModalities", JSONArray().put("TEXT").put("IMAGE"))
                 )
             }
-            val raw = postJson(url, body) ?: return null
+            val raw = postJson(url, body) ?: return ImageResult(null, "No response from the network request.")
             val json = JSONObject(raw)
-            val candidates = json.optJSONArray("candidates") ?: return null
-            if (candidates.length() == 0) return null
+            if (json.has("error")) {
+                return ImageResult(null, json.getJSONObject("error").optString("message", "Unknown API error"))
+            }
+            val candidates = json.optJSONArray("candidates")
+            if (candidates == null || candidates.length() == 0) {
+                return ImageResult(null, "The model returned no candidates. Raw response: ${raw.take(300)}")
+            }
             val parts = candidates.getJSONObject(0).getJSONObject("content").getJSONArray("parts")
             for (i in 0 until parts.length()) {
                 val p = parts.getJSONObject(i)
                 val inline = p.optJSONObject("inlineData") ?: p.optJSONObject("inline_data")
                 if (inline != null) {
                     val b64 = inline.optString("data")
-                    return Base64.decode(b64, Base64.DEFAULT)
+                    return ImageResult(Base64.decode(b64, Base64.DEFAULT), null)
                 }
             }
-            null
+            // Got a response, but no image part — usually means the model
+            // replied with text only (e.g. it refused, or the account/key
+            // doesn't have image-generation access enabled).
+            val textOnly = parts.joinToString(" ") { it.optString("text", "") }.trim()
+            ImageResult(null, if (textOnly.isNotBlank()) "Model replied with text instead of an image: $textOnly" else "No image data in the response.")
         } catch (e: Exception) {
-            null
+            ImageResult(null, e.message ?: "Unknown error")
         }
     }
 

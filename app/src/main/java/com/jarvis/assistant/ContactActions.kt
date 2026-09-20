@@ -35,7 +35,6 @@ object ContactActions {
 
     fun call(ctx: Context, number: String) {
         val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        ctx.startActivity(intent)
+        SystemLauncher.launch(ctx, intent, "Phone call")
     }
 }
