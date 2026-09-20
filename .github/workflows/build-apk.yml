@@ -19,13 +19,20 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           accept-android-sdk-licenses: true
-          packages: "platform-tools platforms;android-34 build-tools;34.0.0"
+          packages: >-
+            platform-tools
+            platforms;android-34
+            build-tools;34.0.0
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
 
       - name: Create local.properties
         shell: bash
@@ -33,17 +40,10 @@ jobs:
           echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> local.properties
 
-      - name: Verify Gradle wrapper
-        shell: bash
-        run: |
-          test -f gradlew
-          chmod +x gradlew
-          ./gradlew --version
-
       - name: Build debug APK
         shell: bash
         run: |
-          ./gradlew assembleDebug --no-daemon
+          gradle assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
