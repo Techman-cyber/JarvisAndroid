@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -15,16 +16,13 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           accept-android-sdk-licenses: true
-          packages: |
-            platform-tools
-            platforms;android-34
-            build-tools;34.0.0
+          packages: "platform-tools platforms;android-34 build-tools;34.0.0"
 
       - name: Inject Gemini API key
         run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> local.properties
