@@ -24,19 +24,33 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           accept-android-sdk-licenses: true
-          packages: platform-tools platforms;android-34 build-tools;34.0.0
+          packages: |
+            platform-tools
+            platforms;android-34
+            build-tools;34.0.0
 
-      - name: Inject Gemini API key
-        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> local.properties
+      - name: Create local.properties
+        working-directory: android
+        shell: bash
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> local.properties
 
-      - name: Make Gradle wrapper executable
-        run: chmod +x gradlew
+      - name: Verify Gradle wrapper exists
+        working-directory: android
+        shell: bash
+        run: |
+          test -f gradlew
+          chmod +x gradlew
+          ls -l gradlew
 
       - name: Build debug APK
+        working-directory: android
         run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: jarvis-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
