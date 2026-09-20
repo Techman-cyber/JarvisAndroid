@@ -2,7 +2,8 @@ name: Build APK
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -24,10 +25,7 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           accept-android-sdk-licenses: true
-          packages: |
-            platform-tools
-            platforms;android-34
-            build-tools;34.0.0
+          packages: "platform-tools platforms;android-34 build-tools;34.0.0"
 
       - name: Create local.properties
         working-directory: android
@@ -36,17 +34,19 @@ jobs:
           echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> local.properties
 
-      - name: Verify Gradle wrapper exists
+      - name: Verify Gradle wrapper
         working-directory: android
         shell: bash
         run: |
           test -f gradlew
           chmod +x gradlew
-          ls -l gradlew
+          ./gradlew --version
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        shell: bash
+        run: |
+          ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
