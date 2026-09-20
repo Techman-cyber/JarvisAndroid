@@ -24,6 +24,13 @@ import androidx.core.app.NotificationCompat
  */
 class WakeWordService : Service() {
 
+    companion object {
+        // MainActivity reads this on launch so the Start/Stop button reflects
+        // whether the service is actually alive, instead of assuming "off"
+        // just because the Activity itself was recreated.
+        @Volatile var isRunning: Boolean = false
+    }
+
     private var recognizer: SpeechRecognizer? = null
     private var listening = false
     private var awake = false
@@ -33,6 +40,7 @@ class WakeWordService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         val notification = buildNotification("Listening for \"${Prefs.getWakeWord(this)}\"…")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -185,9 +193,23 @@ class WakeWordService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         recognizer?.destroy()
         tts.shutdown()
         super.onDestroy()
+    }
+
+    // Many phones (especially Xiaomi/Oppo/Vivo/OnePlus skins) treat swiping
+    // the app away from Recents as a signal to kill everything tied to it,
+    // foreground service or not. START_STICKY tells Android to recreate the
+    // service if it gets killed for memory, but a user's explicit swipe is a
+    // stronger signal some OEMs act on regardless — this override is the
+    // standard way apps ask to keep running through that specific case.
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // Intentionally does nothing beyond the super call: NOT stopping
+        // here, combined with START_STICKY below, is what keeps Jarvis
+        // listening after the app is swiped away rather than just backgrounded.
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

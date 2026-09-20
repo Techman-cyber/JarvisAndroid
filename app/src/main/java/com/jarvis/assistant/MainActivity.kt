@@ -1,14 +1,18 @@
 package com.jarvis.assistant
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -18,7 +22,6 @@ import com.jarvis.assistant.databinding.ActivityMainBinding
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private var serviceRunning = false
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -69,6 +72,7 @@ class MainActivity : AppCompatActivity() {
 
         applyModeUi(Prefs.isSeriousMode(this))
         restoreTranscript()
+        syncServiceStateUi()
 
         binding.settingsButton.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -83,7 +87,7 @@ class MainActivity : AppCompatActivity() {
             val text = binding.chatInput.text.toString().trim()
             if (text.isNotEmpty()) {
                 binding.chatInput.setText("")
-                if (!serviceRunning) toggleService()
+                if (!WakeWordService.isRunning) toggleService()
                 val i = Intent(this, WakeWordService::class.java)
                 i.putExtra("manual_text", text)
                 ContextCompat.startForegroundService(this, i)
@@ -91,6 +95,26 @@ class MainActivity : AppCompatActivity() {
         }
 
         requestPermissionsIfNeeded()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The service can outlive this Activity being recreated (e.g. you
+        // left the app running, then reopened it) — reflect its real state
+        // rather than assuming "off" just because this screen is fresh.
+        syncServiceStateUi()
+    }
+
+    private fun syncServiceStateUi() {
+        if (WakeWordService.isRunning) {
+            binding.toggleButton.text = "Stop Jarvis"
+            binding.toggleButton.setBackgroundResource(R.drawable.bg_toggle_on)
+            binding.statusText.text = "Say \"${Prefs.getWakeWord(this)}\" to begin"
+        } else {
+            binding.toggleButton.text = "Start Jarvis"
+            binding.toggleButton.setBackgroundResource(R.drawable.bg_toggle_off)
+            binding.statusText.text = "Off"
+        }
     }
 
     private fun applyModeUi(serious: Boolean) {
@@ -111,20 +135,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("BatteryLife")
+    private fun requestBatteryExemption() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            }
+        } catch (e: Exception) {
+            // Some OEM builds block this intent entirely; nothing more we can
+            // do here besides pointing the person at Settings manually (README).
+        }
+    }
+
     private fun toggleService() {
         val intent = Intent(this, WakeWordService::class.java)
-        if (!serviceRunning) {
+        if (!WakeWordService.isRunning) {
             ContextCompat.startForegroundService(this, intent)
-            serviceRunning = true
-            binding.toggleButton.text = "Stop Jarvis"
-            binding.toggleButton.setBackgroundResource(R.drawable.bg_toggle_on)
-            binding.statusText.text = "Say \"${Prefs.getWakeWord(this)}\" to begin"
+            requestBatteryExemption()
+            syncServiceStateUi()
         } else {
             stopService(intent)
-            serviceRunning = false
-            binding.toggleButton.text = "Start Jarvis"
-            binding.toggleButton.setBackgroundResource(R.drawable.bg_toggle_off)
-            binding.statusText.text = "Off"
+            syncServiceStateUi()
             binding.sphereView.setEnergy(0.08f)
         }
     }
