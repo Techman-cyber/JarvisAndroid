@@ -125,3 +125,5 @@ and I'll fix the source directly.
 - `QUERY_ALL_PACKAGES` (needed to find/launch apps by name) is fine for a
   personal sideloaded APK but would need justification to publish on the
   Play Store.
+
+  ## Made by Techman-cyber
