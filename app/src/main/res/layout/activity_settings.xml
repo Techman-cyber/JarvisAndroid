@@ -147,6 +147,22 @@
             android:background="@drawable/bg_rounded_input"
             android:padding="8dp"/>
 
+        <TextView
+            android:id="@+id/testVoiceButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_rounded_button"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:layout_marginTop="8dp"
+            android:text="\u25b6 Test voice"
+            android:textColor="@color/accent"
+            android:textSize="12sp"
+            android:clickable="true"
+            android:focusable="true"/>
+
         <Button
             android:id="@+id/saveButton"
             android:layout_width="match_parent"

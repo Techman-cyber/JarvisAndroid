@@ -123,6 +123,19 @@ class WakeWordService : Service() {
     }
 
     private fun handleHeard(text: String) {
+        try {
+            handleHeardInternal(text)
+        } catch (e: Exception) {
+            // This callback runs on the main thread — an uncaught exception
+            // here kills the entire app (service, notification, everything)
+            // silently, which is exactly what "voice and text both went
+            // dead at once" looks like from outside. Never let that happen.
+            awake = false
+            restartListening()
+        }
+    }
+
+    private fun handleHeardInternal(text: String) {
         val wake = Prefs.getWakeWord(this)
         val lower = text.lowercase()
 

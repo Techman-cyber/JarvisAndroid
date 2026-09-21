@@ -98,35 +98,20 @@ object GeminiClient {
             if (candidates == null || candidates.length() == 0) {
                 return ImageResult(null, "The model returned no candidates. Raw response: ${raw.take(300)}")
             }
-
             val parts = candidates.getJSONObject(0).getJSONObject("content").getJSONArray("parts")
-
             for (i in 0 until parts.length()) {
-                val part = parts.getJSONObject(i)
-                val inline = part.optJSONObject("inlineData") ?: part.optJSONObject("inline_data")
-
+                val p = parts.getJSONObject(i)
+                val inline = p.optJSONObject("inlineData") ?: p.optJSONObject("inline_data")
                 if (inline != null) {
-                    val base64Data = inline.optString("data")
-                    if (base64Data.isNotBlank()) {
-                        return ImageResult(Base64.decode(base64Data, Base64.DEFAULT), null)
-                    }
+                    val b64 = inline.optString("data")
+                    return ImageResult(Base64.decode(b64, Base64.DEFAULT), null)
                 }
             }
-
-            val textOnly = buildString {
-                for (i in 0 until parts.length()) {
-                    if (i > 0) append(" ")
-                    append(parts.optJSONObject(i)?.optString("text", "").orEmpty())
-                }
-            }.trim()
-
-            val errorMessage = if (textOnly.isNotBlank()) {
-                "Model replied with text instead of an image: $textOnly"
-            } else {
-                "No image data in the response."
-            }
-
-            ImageResult(null, errorMessage)
+            // Got a response, but no image part — usually means the model
+            // replied with text only (e.g. it refused, or the account/key
+            // doesn't have image-generation access enabled).
+            val textOnly = parts.joinToString(" ") { it.optString("text", "") }.trim()
+            ImageResult(null, if (textOnly.isNotBlank()) "Model replied with text instead of an image: $textOnly" else "No image data in the response.")
         } catch (e: Exception) {
             ImageResult(null, e.message ?: "Unknown error")
         }

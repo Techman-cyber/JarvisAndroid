@@ -48,6 +48,21 @@ class CommandProcessor(
     }
 
     fun handle(rawText: String) {
+        // A crash anywhere in here (or in the background threads it spawns)
+        // used to be able to kill the entire app process silently — which
+        // looks exactly like "voice and text both stopped responding at
+        // once" from outside. Everything routes through this guard now so a
+        // single bad command can't take the whole assistant down with it.
+        try {
+            handleInternal(rawText)
+        } catch (e: Exception) {
+            callback.onJarvisSpoken("Something went wrong with that command.")
+            callback.onJarvisDetail("Error in handle(): ${e.javaClass.simpleName}: ${e.message}")
+            try { tts.speak("Something went wrong with that command.") } catch (e2: Exception) {}
+        }
+    }
+
+    private fun handleInternal(rawText: String) {
         val rawTrimmed = rawText.trim()
         if (rawTrimmed.isEmpty()) return
         callback.onUserText(rawTrimmed)
@@ -205,19 +220,27 @@ class CommandProcessor(
                 val prompt = m.groupValues[1].trim()
                 respond("Generating that image, $honorific.")
                 Thread {
-                    val apiKey = Prefs.getApiKey(ctx)
-                    val result = GeminiClient.generateImage(apiKey, Prefs.getImageModel(ctx), prompt)
-                    if (result.bytes != null) {
-                        val file = java.io.File(ctx.cacheDir, "jarvis_image_${System.currentTimeMillis()}.png")
-                        file.writeBytes(result.bytes)
-                        callback.onImageReady(file.absolutePath)
-                        tts.speak("Here's your image, $honorific.")
-                    } else {
-                        // Speak the real reason instead of a generic failure —
-                        // this is almost always a billing/quota/model-access
-                        // issue on the API key, not a bug, so it's worth seeing.
-                        callback.onJarvisDetail("Image generation failed: ${result.error}")
-                        tts.speak("That image didn't work. I've put the exact error on screen.")
+                    try {
+                        val apiKey = Prefs.getApiKey(ctx)
+                        val result = GeminiClient.generateImage(apiKey, Prefs.getImageModel(ctx), prompt)
+                        if (result.bytes != null) {
+                            val file = java.io.File(ctx.cacheDir, "jarvis_image_${System.currentTimeMillis()}.png")
+                            file.writeBytes(result.bytes)
+                            callback.onImageReady(file.absolutePath)
+                            tts.speak("Here's your image, $honorific.")
+                        } else {
+                            // Speak the real reason instead of a generic failure —
+                            // this is almost always a billing/quota/model-access
+                            // issue on the API key, not a bug, so it's worth seeing.
+                            callback.onJarvisDetail("Image generation failed: ${result.error}")
+                            tts.speak("That image didn't work. I've put the exact error on screen.")
+                        }
+                    } catch (e: Exception) {
+                        // An uncaught exception on a background thread kills the
+                        // whole app process in Android — this is what stood
+                        // between "the image failed" and "everything went silent".
+                        callback.onJarvisDetail("Image generation crashed: ${e.javaClass.simpleName}: ${e.message}")
+                        try { tts.speak("That image request crashed.") } catch (e2: Exception) {}
                     }
                 }.start()
                 return
@@ -225,38 +248,43 @@ class CommandProcessor(
 
         // Fallback: general question to Gemini.
         Thread {
-            val apiKey = Prefs.getApiKey(ctx)
-            if (apiKey.isBlank()) {
-                tts.speak("I don't have an API key yet. Add one in Settings.")
-                callback.onJarvisSpoken("I don't have an API key yet. Add one in Settings.")
-                return@Thread
+            try {
+                val apiKey = Prefs.getApiKey(ctx)
+                if (apiKey.isBlank()) {
+                    tts.speak("I don't have an API key yet. Add one in Settings.")
+                    callback.onJarvisSpoken("I don't have an API key yet. Add one in Settings.")
+                    return@Thread
+                }
+                val serious = Prefs.isSeriousMode(ctx)
+                val facts = MemoryStore.getFacts(ctx)
+                val factsBlock = if (facts.isNotEmpty())
+                    "\n\nThings the user has told you to remember, use them when relevant:\n" +
+                        facts.joinToString("\n") { "- $it" }
+                else ""
+                val sys = (
+                    if (serious)
+                        "You are Jarvis, a no-nonsense assistant. Be direct and brief. No pleasantries, no hedging, no filler."
+                    else
+                        "You are Jarvis, a warm, capable voice assistant modeled on a classic AI butler. Occasionally address the user as \"$honorific\"."
+                    ) + factsBlock + "\n\nAlways answer in exactly this format, nothing else:\n" +
+                    "SPOKEN: <one short sentence, at most ~20 words, the single most important part, written to be read aloud>\n" +
+                    "DETAIL: <the fuller answer, as long as needed; repeat SPOKEN here if nothing more to add>"
+                // Short-term memory: recent turns give Gemini conversational context.
+                // The current turn is already the last transcript entry (added by
+                // onUserText above), so drop it — it's passed separately as userText.
+                val priorTurns = MemoryStore.getTranscript(ctx)
+                    .dropLast(1)
+                    .filter { it.first == "user" || it.first == "jarvis" }
+                    .takeLast(10)
+                    .map { Turn(if (it.first == "user") "user" else "model", it.second) }
+                val reply = GeminiClient.ask(apiKey, Prefs.getTextModel(ctx), sys, priorTurns, text)
+                callback.onJarvisSpoken(reply.spoken)
+                tts.speak(reply.spoken)
+                if (reply.detail != null && reply.detail != reply.spoken) callback.onJarvisDetail(reply.detail)
+            } catch (e: Exception) {
+                callback.onJarvisDetail("Gemini call crashed: ${e.javaClass.simpleName}: ${e.message}")
+                try { tts.speak("Something went wrong reaching Gemini.") } catch (e2: Exception) {}
             }
-            val serious = Prefs.isSeriousMode(ctx)
-            val facts = MemoryStore.getFacts(ctx)
-            val factsBlock = if (facts.isNotEmpty())
-                "\n\nThings the user has told you to remember, use them when relevant:\n" +
-                    facts.joinToString("\n") { "- $it" }
-            else ""
-            val sys = (
-                if (serious)
-                    "You are Jarvis, a no-nonsense assistant. Be direct and brief. No pleasantries, no hedging, no filler."
-                else
-                    "You are Jarvis, a warm, capable voice assistant modeled on a classic AI butler. Occasionally address the user as \"$honorific\"."
-                ) + factsBlock + "\n\nAlways answer in exactly this format, nothing else:\n" +
-                "SPOKEN: <one short sentence, at most ~20 words, the single most important part, written to be read aloud>\n" +
-                "DETAIL: <the fuller answer, as long as needed; repeat SPOKEN here if nothing more to add>"
-            // Short-term memory: recent turns give Gemini conversational context.
-            // The current turn is already the last transcript entry (added by
-            // onUserText above), so drop it — it's passed separately as userText.
-            val priorTurns = MemoryStore.getTranscript(ctx)
-                .dropLast(1)
-                .filter { it.first == "user" || it.first == "jarvis" }
-                .takeLast(10)
-                .map { Turn(if (it.first == "user") "user" else "model", it.second) }
-            val reply = GeminiClient.ask(apiKey, Prefs.getTextModel(ctx), sys, priorTurns, text)
-            callback.onJarvisSpoken(reply.spoken)
-            tts.speak(reply.spoken)
-            if (reply.detail != null && reply.detail != reply.spoken) callback.onJarvisDetail(reply.detail)
         }.start()
     }
 

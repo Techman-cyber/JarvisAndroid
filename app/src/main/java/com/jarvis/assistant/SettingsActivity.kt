@@ -37,6 +37,7 @@ class SettingsActivity : AppCompatActivity() {
             this, android.R.layout.simple_spinner_dropdown_item, listOf("Loading voices\u2026")
         )
         tts.whenReady { populateVoiceSpinner() }
+        binding.testVoiceButton.setOnClickListener { testSelectedVoice() }
 
         binding.saveButton.setOnClickListener {
             Prefs.setApiKey(this, binding.apiKeyInput.text.toString().trim())
@@ -54,6 +55,18 @@ class SettingsActivity : AppCompatActivity() {
             MemoryStore.clearEverything(this)
             Toast.makeText(this, "Memory cleared", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun testSelectedVoice() {
+        val selected = voices.getOrNull(binding.voiceSpinner.selectedItemPosition)
+        if (selected == null) {
+            Toast.makeText(this, "No voice selected yet", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // Preview immediately without needing to hit Save first.
+        tts.setPreferredVoiceName(selected.name)
+        val honorific = if (binding.honorificSwitch.isChecked) "ma'am" else "sir"
+        tts.speak("Hello $honorific, this is what I sound like.")
     }
 
     private fun populateVoiceSpinner() {
