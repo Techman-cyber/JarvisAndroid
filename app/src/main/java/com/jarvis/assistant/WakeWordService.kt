@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -34,41 +35,51 @@ class WakeWordService : Service() {
     private var recognizer: SpeechRecognizer? = null
     private var listening = false
     private var awake = false
+    private var stopped = false
     private lateinit var tts: TtsManager
     private lateinit var processor: CommandProcessor
+    private lateinit var audioManager: AudioManager
     private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
-        isRunning = true
-        val notification = buildNotification("Listening for \"${Prefs.getWakeWord(this)}\"…")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        } else {
-            startForeground(1, notification)
+        try {
+            isRunning = true
+            audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val notification = buildNotification("Listening for \"${Prefs.getWakeWord(this)}\"…")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } else {
+                startForeground(1, notification)
+            }
+
+            tts = TtsManager(this) { restartListening() }
+            tts.setPreferredVoiceName(Prefs.getVoiceName(this))
+
+            processor = CommandProcessor(this, tts, object : JarvisCallback {
+                override fun onUserText(text: String) {
+                    MemoryStore.appendTranscript(this@WakeWordService, "user", text)
+                    broadcastLine("user", text)
+                }
+                override fun onJarvisSpoken(text: String) {
+                    MemoryStore.appendTranscript(this@WakeWordService, "jarvis", text)
+                    broadcastLine("jarvis", text)
+                }
+                override fun onJarvisDetail(text: String) {
+                    MemoryStore.appendTranscript(this@WakeWordService, "detail", text)
+                    broadcastLine("detail", text)
+                }
+                override fun onImageReady(filePath: String) = broadcastImage(filePath)
+                override fun onModeChanged(serious: Boolean) = broadcastMode(serious)
+            })
+
+            startListening()
+        } catch (e: Exception) {
+            // If setup itself throws, the service would otherwise die with no
+            // trace at all — this at least leaves a visible notification
+            // instead of Jarvis just silently never starting.
+            updateNotification("Jarvis failed to start: ${e.message}")
         }
-
-        tts = TtsManager(this) { restartListening() }
-        tts.setPreferredVoiceName(Prefs.getVoiceName(this))
-
-        processor = CommandProcessor(this, tts, object : JarvisCallback {
-            override fun onUserText(text: String) {
-                MemoryStore.appendTranscript(this@WakeWordService, "user", text)
-                broadcastLine("user", text)
-            }
-            override fun onJarvisSpoken(text: String) {
-                MemoryStore.appendTranscript(this@WakeWordService, "jarvis", text)
-                broadcastLine("jarvis", text)
-            }
-            override fun onJarvisDetail(text: String) {
-                MemoryStore.appendTranscript(this@WakeWordService, "detail", text)
-                broadcastLine("detail", text)
-            }
-            override fun onImageReady(filePath: String) = broadcastImage(filePath)
-            override fun onModeChanged(serious: Boolean) = broadcastMode(serious)
-        })
-
-        startListening()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -77,47 +88,86 @@ class WakeWordService : Service() {
     }
 
     private fun startListening() {
-        if (listening || !SpeechRecognizer.isRecognitionAvailable(this)) return
-        recognizer = SpeechRecognizer.createSpeechRecognizer(this)
-        recognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {
-                broadcastRms(rmsdB)
-            }
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-            override fun onError(error: Int) {
-                listening = false
-                restartListening()
-            }
-            override fun onResults(results: Bundle?) {
-                listening = false
-                val text = results
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull() ?: ""
-                handleHeard(text)
-            }
-            override fun onPartialResults(partialResults: Bundle?) {
-                val text = partialResults
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull() ?: ""
-                if (text.isNotBlank()) broadcastHeard(text)
-            }
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        if (stopped || listening) return
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            updateNotification("Speech recognition isn't available on this device")
+            return
         }
-        listening = true
-        recognizer?.startListening(intent)
+        try {
+            recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            recognizer?.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {
+                    broadcastRms(rmsdB)
+                }
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {
+                    unmuteBeep()
+                }
+                override fun onError(error: Int) {
+                    unmuteBeep()
+                    listening = false
+                    restartListening()
+                }
+                override fun onResults(results: Bundle?) {
+                    unmuteBeep()
+                    listening = false
+                    val text = results
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull() ?: ""
+                    handleHeard(text)
+                }
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val text = partialResults
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull() ?: ""
+                    if (text.isNotBlank()) broadcastHeard(text)
+                }
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            }
+            listening = true
+            muteBeep()
+            recognizer?.startListening(intent)
+        } catch (e: Exception) {
+            // createSpeechRecognizer/startListening can throw on some devices
+            // (no recognizer component, rapid restart, OEM restrictions) —
+            // without this, that exception would kill the whole app outright
+            // instead of just this one listen attempt.
+            unmuteBeep()
+            listening = false
+            handler.postDelayed({ startListening() }, 1500)
+        }
+    }
+
+    // Android plays a system "start" and "end" beep every single time
+    // SpeechRecognizer starts/stops listening — there's no official API to
+    // disable it. With this loop restarting several times a minute, that
+    // becomes a constant, genuinely irritating beeping. Muting the music
+    // stream for the brief window around each listen is the standard
+    // workaround; it's restored the instant that listen attempt ends.
+    private fun muteBeep() {
+        try {
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+        } catch (e: Exception) {}
+    }
+    private fun unmuteBeep() {
+        try {
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+        } catch (e: Exception) {}
     }
 
     private fun restartListening() {
-        recognizer?.destroy()
+        if (stopped) return
+        try {
+            recognizer?.destroy()
+        } catch (e: Exception) {}
         recognizer = null
         handler.postDelayed({ startListening() }, 400)
     }
@@ -174,6 +224,13 @@ class WakeWordService : Service() {
             .build()
     }
 
+    private fun updateNotification(text: String) {
+        try {
+            val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            mgr.notify(1, buildNotification(text))
+        } catch (e: Exception) {}
+    }
+
     private fun broadcastLine(kind: String, text: String) {
         val i = Intent("com.jarvis.assistant.LOG")
         i.putExtra("kind", kind)
@@ -206,9 +263,16 @@ class WakeWordService : Service() {
     }
 
     override fun onDestroy() {
+        stopped = true
         isRunning = false
-        recognizer?.destroy()
-        tts.shutdown()
+        // Cancel any queued restart — without this, a restart already
+        // scheduled by handler.postDelayed() can fire a moment after the
+        // service is "stopped", which is exactly what caused the beep to
+        // keep happening even after turning Jarvis off.
+        handler.removeCallbacksAndMessages(null)
+        try { recognizer?.destroy() } catch (e: Exception) {}
+        unmuteBeep()
+        try { tts.shutdown() } catch (e: Exception) {}
         super.onDestroy()
     }
 
