@@ -107,11 +107,25 @@ object GeminiClient {
                     return ImageResult(Base64.decode(b64, Base64.DEFAULT), null)
                 }
             }
+
             // Got a response, but no image part — usually means the model
             // replied with text only (e.g. it refused, or the account/key
             // doesn't have image-generation access enabled).
-            val textOnly = parts.joinToString(" ") { it.optString("text", "") }.trim()
-            ImageResult(null, if (textOnly.isNotBlank()) "Model replied with text instead of an image: $textOnly" else "No image data in the response.")
+            val textOnly = buildString {
+                for (i in 0 until parts.length()) {
+                    if (i > 0) append(' ')
+                    append(parts.getJSONObject(i).optString("text", ""))
+                }
+            }.trim()
+
+            ImageResult(
+                null,
+                if (textOnly.isNotBlank()) {
+                    "Model replied with text instead of an image: $textOnly"
+                } else {
+                    "No image data in the response."
+                }
+            )
         } catch (e: Exception) {
             ImageResult(null, e.message ?: "Unknown error")
         }
